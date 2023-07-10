@@ -1,11 +1,11 @@
 import boto3
 import config
 
-def __create_ec2_instance(ec2_resource):
-    def create_ec2_instance(ec2_resource):
+def create(ec2_resource, image_id="ami-08e5424edfe926b43"):
+    def create_ec2_instance(ec2_resource, image_id="ami-08e5424edfe926b43"):
         # Launch a new instance
         instance = ec2_resource.create_instances(
-            ImageId='ami-002843b0a9e09324a',  # Specify the AMI ID for the desired instance image
+            ImageId=image_id,  # Specify the AMI ID for the desired instance image
             InstanceType='t2.micro',  # Specify the instance type
             MinCount=1,
             MaxCount=1,
@@ -19,7 +19,11 @@ def __create_ec2_instance(ec2_resource):
 
     def run_commands_on_instance(instance_id, commands):
         # Create an SSM client
-        ssm_client = boto3.client('ssm')
+        ssm_client = boto3.client('ssm', 
+                                  region_name=config.Credentials.region, 
+                                  aws_access_key_id=config.Credentials.key, 
+                                  aws_secret_access_key=config.Credentials.secret
+                                  )
 
         # Send the commands to the instance
         response = ssm_client.send_command(
@@ -51,7 +55,7 @@ def __create_ec2_instance(ec2_resource):
         print(output['StandardError'])
 
     # Create a new EC2 instance
-    instance_id = create_ec2_instance(ec2_resource)
+    instance_id = create_ec2_instance(ec2_resource, image_id)
 
     # Define the commands to run on the instance
     with open("new_starting_script.txt", "r") as f:
@@ -71,7 +75,7 @@ def __create_ec2_instance(ec2_resource):
 
 
 if __name__ == "__main__":
-    instance_id = __create_ec2_instance(ec2_resource=boto3.resource(
+    instance_id = create(ec2_resource=boto3.resource(
         'ec2',
         region_name=config.Credentials.region,
         aws_access_key_id=config.Credentials.key,
