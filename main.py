@@ -3,7 +3,7 @@ import boto3
 import config
 import threading
 import time
-from create_new import __create_ec2_instance
+import create_new
 
 class Manager:
     def __init__(self) -> None:
@@ -25,7 +25,10 @@ class Manager:
                     nodes.append(instance['InstanceId'])
         # start the nodes if they are not running
         for node in nodes:
-            TProxy(instance_id=node, ec2=ec2).start()
+            try:
+                TProxy(instance_id=node, ec2=ec2).start()
+            except:
+                pass
         self.ec2_resoruce = ec2_resource
         self.nodes = nodes
         self.ec2 = ec2
@@ -34,11 +37,12 @@ class Manager:
         self.__start_auto_method()
 
     def make_new_proxy(self):
-        new_instance_id = __create_ec2_instance(self.ec2_resoruce)
+        new_instance_id = create_new.create(self.ec2_resoruce, config.Extras.image_id)
         self.nodes.append(new_instance_id)
         return new_instance_id
         
-    def serve(self, old_instance_ip):
+    def serve(self, old_instance_ip=""):
+        old_instance_id = ""
         if old_instance_ip:
             for instance_id in self.in_use:
                 if TProxy(instance_id=instance_id, ec2=self.ec2).get_current_ip() == old_instance_ip:
@@ -66,10 +70,13 @@ class Manager:
         threading.Timer(0, self.cleanup).start()
     
     def delete_node(self, instance_id):
+
         self.nodes.remove(instance_id)
         self.ec2.terminate_instances(InstanceIds=[instance_id])
-        self.to_restart.remove(instance_id)
-        self.in_use.remove(instance_id)
+        if instance_id in self.in_use:
+            self.in_use.remove(instance_id)
+        if instance_id in self.to_restart:
+            self.to_restart.remove(instance_id)
 
         return instance_id
 
@@ -89,22 +96,29 @@ class Manager:
         for instance_id in [*self.nodes, *self.in_use, *self.to_restart]:
             self.ec2_resource.Instance(instance_id).stop()
             self.nodes.remove(instance_id)
-            self.to_restart.remove(instance_id)
-            self.in_use.remove(instance_id)
-        
+            if instance_id in self.in_use:
+                self.in_use.remove(instance_id)
+            if instance_id in self.to_restart:
+                self.to_restart.remove(instance_id)
+
 if __name__ == "__main__":
     manager = Manager()
-    while True: 
-        print(manager.len_available())
-        print(manager.get_available())
-        if manager.len_available() == 0:
-            for x in range(3):
-                manager.make_new_proxy()
-        ip = manager.serve()
-        for x in range(10):
-            ip = manager.serve(ip)
-            print(ip)
-            time.sleep(15)
+    for node in manager.nodes:
+        print("Deleting node", node)
+        manager.delete_node(node)
+    print(manager.len_available())
+    print(manager.get_available())
+    if manager.len_available() < 3:
+        for x in range(3 - manager.len_available()):
+            manager.make_new_proxy()
+    ip = manager.serve()
+    for x in range(10):
+        ip = manager.serve(ip)
+        print(ip)
+        time.sleep(15)
+    manager.shutdown_all()
+    for node in manager.nodes:
+        manager.delete_node(node)
 
     
 
