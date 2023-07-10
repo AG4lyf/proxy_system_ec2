@@ -26,7 +26,7 @@ class Manager:
         # start the nodes if they are not running
         for node in nodes:
             TProxy(instance_id=node, ec2=ec2).start()
-        self.ec2_reserouce = ec2_resource
+        self.ec2_resoruce = ec2_resource
         self.nodes = nodes
         self.ec2 = ec2
         self.in_use = []
@@ -34,20 +34,23 @@ class Manager:
         self.__start_auto_method()
 
     def make_new_proxy(self):
-        new_instance_id = __create_ec2_instance(self.ec2_reserouce)
+        new_instance_id = __create_ec2_instance(self.ec2_resoruce)
         self.nodes.append(new_instance_id)
         return new_instance_id
         
     def serve(self, old_instance_ip):
-        for instance_id in self.in_use:
-            if TProxy(instance_id=instance_id, ec2=self.ec2).get_current_ip() == old_instance_ip:
-                old_instance_id = instance_id
-                break
+        if old_instance_ip:
+            for instance_id in self.in_use:
+                if TProxy(instance_id=instance_id, ec2=self.ec2).get_current_ip() == old_instance_ip:
+                    old_instance_id = instance_id
+                    break
+
         if len(self.nodes) == 0:
             return None
         new_instance_id = self.nodes.pop()
         self.in_use.append(new_instance_id)
-        self.to_restart.append(old_instance_id)
+        if old_instance_id:
+            self.to_restart.append(old_instance_id)
         # return the public ip of the new instance
         response = self.ec2.describe_instances(InstanceIds=[new_instance_id])
         return response['Reservations'][0]['Instances'][0]['PublicIpAddress']
@@ -62,6 +65,14 @@ class Manager:
     def __start_auto_method(self):
         threading.Timer(0, self.cleanup).start()
     
+    def delete_node(self, instance_id):
+        self.nodes.remove(instance_id)
+        self.ec2.terminate_instances(InstanceIds=[instance_id])
+        self.to_restart.remove(instance_id)
+        self.in_use.remove(instance_id)
+
+        return instance_id
+
     def len_available(self):
         return len(self.nodes)
     
@@ -73,9 +84,27 @@ class Manager:
             self.to_restart.append(instance_id)
             self.nodes.remove(instance_id)
         self.cleanup()
+    
+    def shutdown_all(self):
+        for instance_id in [*self.nodes, *self.in_use, *self.to_restart]:
+            self.ec2_resource.Instance(instance_id).stop()
+            self.nodes.remove(instance_id)
+            self.to_restart.remove(instance_id)
+            self.in_use.remove(instance_id)
         
-my_object = Manager()
+if __name__ == "__main__":
+    manager = Manager()
+    while True: 
+        print(manager.len_available())
+        print(manager.get_available())
+        if manager.len_available() == 0:
+            for x in range(3):
+                manager.make_new_proxy()
+        ip = manager.serve()
+        for x in range(10):
+            ip = manager.serve(ip)
+            print(ip)
+            time.sleep(15)
 
-# Keep the program running
-while True:
-    time.sleep(1)
+    
+
