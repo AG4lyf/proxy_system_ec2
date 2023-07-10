@@ -38,9 +38,11 @@ class Manager:
         self.nodes.append(new_instance_id)
         return new_instance_id
         
-    def serve(self, old_instance_id):
-        if old_instance_id in self.in_use:
-            self.in_use.remove(old_instance_id)
+    def serve(self, old_instance_ip):
+        for instance_id in self.in_use:
+            if TProxy(instance_id=instance_id, ec2=self.ec2).get_current_ip() == old_instance_ip:
+                old_instance_id = instance_id
+                break
         if len(self.nodes) == 0:
             return None
         new_instance_id = self.nodes.pop()
@@ -59,7 +61,19 @@ class Manager:
 
     def __start_auto_method(self):
         threading.Timer(0, self.cleanup).start()
+    
+    def len_available(self):
+        return len(self.nodes)
+    
+    def get_available(self):
+        return self.nodes
 
+    def restart_all(self):
+        for instance_id in self.nodes:
+            self.to_restart.append(instance_id)
+            self.nodes.remove(instance_id)
+        self.cleanup()
+        
 my_object = Manager()
 
 # Keep the program running
